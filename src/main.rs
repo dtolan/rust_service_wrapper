@@ -1,10 +1,8 @@
 // Import the required dependencies.
-use serde_derive::Deserialize;
-
 
 
 //use std::fmt;
-
+/*
 // Top level struct to hold the TOML data.
 #[derive(Deserialize)]
 struct Data {
@@ -16,7 +14,7 @@ struct Data {
 struct Config {
     script: String,
 }
-
+*/
 #[cfg(windows)]
 fn main() -> windows_service::Result<()> {
     ping_service::run()
@@ -83,12 +81,23 @@ fn main() {
 */
 #[cfg(windows)]
 mod ping_service {
+    /*
+
     use std::{
         ffi::OsString,
-        net::{IpAddr, SocketAddr, UdpSocket},
+        //net::{IpAddr, SocketAddr, UdpSocket},
         sync::mpsc,
         time::Duration,
     };
+    */
+    use std::{
+        fs,
+        ffi::OsString,
+        process::exit,
+        sync::mpsc,
+        time::Duration,
+    };
+    use serde_derive::Deserialize;
     use windows_service::{
         define_windows_service,
         service::{
@@ -98,14 +107,23 @@ mod ping_service {
         service_control_handler::{self, ServiceControlHandlerResult},
         service_dispatcher, Result,
     };
+    #[derive(Deserialize)]
+    struct Data {
+        config: Config,
+    }
 
+    // Config struct holds to data from the `[config]` section.
+    #[derive(Deserialize)]
+    struct Config {
+        script: String,
+    }
     const SERVICE_NAME: &str = "ping_service";
     const SERVICE_TYPE: ServiceType = ServiceType::OWN_PROCESS;
-
+    /*
     const LOOPBACK_ADDR: [u8; 4] = [127, 0, 0, 1];
     const RECEIVER_PORT: u16 = 1234;
     const PING_MESSAGE: &str = "ping\n";
-
+    */
     pub fn run() -> Result<()> {
         // Register generated `ffi_service_main` with the system and start the service, blocking
         // this thread until the service is stopped.
@@ -171,15 +189,45 @@ mod ping_service {
             process_id: None,
         })?;
 
-        // For demo purposes this service sends a UDP packet once a second.
-        let loopback_ip = IpAddr::from(LOOPBACK_ADDR);
-        let sender_addr = SocketAddr::new(loopback_ip, 0);
-        let receiver_addr = SocketAddr::new(loopback_ip, RECEIVER_PORT);
-        let msg = PING_MESSAGE.as_bytes();
-        let socket = UdpSocket::bind(sender_addr).unwrap();
+        // Variable that holds the filename as a `&str`.
+        let filename = "c:\\config\\test.toml";
+
+        // Read the contents of the file using a `match` block 
+        // to return the `data: Ok(c)` as a `String` 
+        // or handle any `errors: Err(_)`.
+        let contents = match fs::read_to_string(filename) {
+            // If successful return the files text as `contents`.
+            // `c` is a local variable.
+            Ok(c) => c,
+            // Handle the `error` case.
+            Err(_) => {
+                // Write `msg` to `stderr`.
+                eprintln!("Could not read file `{}`", filename);
+                exit(1);
+            }
+        };
+
+        // Use a `match` block to return the 
+        // file `contents` as a `Data struct: Ok(d)`
+        // or handle any `errors: Err(_)`.
+        let data: Data = match toml::from_str(&contents) {
+            // If successful, return data as `Data` struct.
+            // `d` is a local variable.
+            Ok(d) => d,
+            // Handle the `error` case.
+            Err(_) => {
+                // Write `msg` to `stderr`.
+                eprintln!("Unable to load data from `{}`", filename);
+                // Exit the program with exit code `1`.
+                exit(1);
+            }
+        };
+        let script = data.config.script;
+        // Print out the values to `stdout`.
+        println!("{}", script);
+
 
         loop {
-            let _ = socket.send_to(msg, receiver_addr);
 
             // Poll shutdown event.
             match shutdown_rx.recv_timeout(Duration::from_secs(1)) {
@@ -190,6 +238,8 @@ mod ping_service {
                 Err(mpsc::RecvTimeoutError::Timeout) => (),
             };
         }
+
+
 
         // Tell the system that service has stopped.
         status_handle.set_service_status(ServiceStatus {
